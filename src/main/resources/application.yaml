@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: AtsRagBackend
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:ats_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:Pg@123456}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        model: llama3.2
+      embedding:
+        model: nomic-embed-text
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 768
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+---
+
+spring:
+    config:
+      activate:
+        on-profile: dev
+      import:
+        - optional:file:.env[.properties]
+    jpa:
+      show-sql: true

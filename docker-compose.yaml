@@ -1,0 +1,18 @@
+# DO NOT RUN THIS DOCKER COMPOSE
+# this is still incomplete and a placeholder for the future
+services:
+  postgres-vector:
+    image: pgvector/pgvector:pg16
+    container_name: ats-postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Pg@123456}
+      POSTGRES_DB: ${DB_NAME:-ats_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
