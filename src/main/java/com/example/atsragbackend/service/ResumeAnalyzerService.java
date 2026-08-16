@@ -23,7 +23,7 @@ public class ResumeAnalyzerService {
                 
                 Provide:
                 1. "searchQuery": The primary job title matching the candidate's core profile and skill set.
-                2. "searchQueries": A list of 2-3 closely related or alternative job titles to expand search coverage.
+                2. "searchQueries": A list of less than 5 closely related or alternative job titles to expand search coverage.
                 
                 Resume Text:
                 {resume}

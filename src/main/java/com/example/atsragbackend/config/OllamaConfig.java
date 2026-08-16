@@ -40,7 +40,8 @@ public class OllamaConfig {
                         "type": "array",
                         "items": { "type": "string" }
                     }
-                }
+                },
+                "required": ["searchQuery", "searchQueries"]
             }
             """;
 

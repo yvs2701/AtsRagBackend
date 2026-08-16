@@ -14,7 +14,7 @@ Spring Boot backend for parsing PDF resumes, matching LinkedIn jobs via Apify, a
 
 ```bash
 ollama pull nomic-embed-text
-ollama pull llama3.2
+ollama pull gemma4:e4b
 ```
 
 2. Create a .env file in the root directory for storing the DB connection details:
