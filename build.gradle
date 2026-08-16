@@ -32,6 +32,7 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-vector-store-advisor'
 
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'io.netty:netty-resolver-dns-native-macos::osx-aarch_64'
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
