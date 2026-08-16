@@ -1,17 +1,20 @@
-package com.example.atsragbackend.dto;
+package com.example.atsragbackend.model;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ApifyScraperRequest(
         String searchQuery,
         List<String> searchQueries,
         String location,
-        int maxJobs,
+        Integer maxJobs,
         String jobType,
         String experienceLevel,
         String workplaceType,
         String datePosted,
-        boolean scrapeJobDetails
+        Boolean scrapeJobDetails
 ) {
     public static ApifyScraperRequest of(
             JobSearchQuery query,
@@ -25,7 +28,7 @@ public record ApifyScraperRequest(
                 query.searchQuery(),
                 query.searchQueries(),
                 (location != null && !location.isBlank()) ? location : "",
-                20, // Updated to documentation default
+                20,
                 (jobType != null && !jobType.isBlank()) ? jobType : "all",
                 (experienceLevel != null && !experienceLevel.isBlank()) ? experienceLevel : "all",
                 (workplaceType != null && !workplaceType.isBlank()) ? workplaceType : "all",

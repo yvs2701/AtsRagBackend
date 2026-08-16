@@ -1,16 +1,17 @@
 package com.example.atsragbackend.controller;
 
-import com.example.atsragbackend.dto.ApifyScraperRequest;
-import com.example.atsragbackend.dto.JobSearchQuery;
-import com.example.atsragbackend.service.ResumeAnalyzerService;
+import com.example.atsragbackend.entity.MatchTask;
+import com.example.atsragbackend.repository.MatchTaskRepository;
+import com.example.atsragbackend.service.JobMatchService;
 import com.example.atsragbackend.service.ResumeParsingService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/resume")
@@ -18,11 +19,13 @@ import java.util.Map;
 public class ResumeController {
 
     private final ResumeParsingService parsingService;
-    private final ResumeAnalyzerService analyzerService;
+    private final JobMatchService jobMatchService;
+    private final MatchTaskRepository taskRepository;
 
-    public ResumeController(ResumeParsingService parsingService, ResumeAnalyzerService analyzerService) {
+    public ResumeController(ResumeParsingService parsingService, JobMatchService jobMatchService, MatchTaskRepository taskRepository) {
         this.parsingService = parsingService;
-        this.analyzerService = analyzerService;
+        this.jobMatchService = jobMatchService;
+        this.taskRepository = taskRepository;
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -34,41 +37,51 @@ public class ResumeController {
             @RequestParam(value = "workplaceType", defaultValue = "all") String workplaceType,
             @RequestParam(value = "datePosted", defaultValue = "all") String datePosted
     ) {
-        if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "File is missing or empty"));
-        }
-
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.equalsIgnoreCase("application/pdf")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Only PDF files are supported"));
-        }
+        if (file == null || file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "File is missing"));
+        if (!"application/pdf".equalsIgnoreCase(file.getContentType()))
+            return ResponseEntity.badRequest().body(Map.of("error", "Only PDFs supported"));
 
         try {
-            // 1. Extract raw text from the resume
             String extractedText = parsingService.extractText(file);
+            String taskId = UUID.randomUUID().toString();
 
-            // 2. Generate search titles using the LLM
-            JobSearchQuery searchQuery = analyzerService.generateSearchQuery(extractedText);
+            MatchTask task = new MatchTask(taskId, MatchTask.TaskStatus.PROCESSING, extractedText);
+            taskRepository.save(task);
 
-            // 3. Assemble the complete scraper request payload
-            ApifyScraperRequest scraperRequest = ApifyScraperRequest.of(
-                    searchQuery,
-                    location,
-                    experienceLevel,
-                    jobType,
-                    workplaceType,
-                    datePosted
+            jobMatchService.processResumeTask(
+                    taskId, extractedText, location, experienceLevel, jobType, workplaceType, datePosted
             );
 
-            // 4. Return the assembled payload for verification
-            return ResponseEntity.ok(Map.of(
-                    "status", "PROCESSING",
-                    "message", "Resume parsed and scraper request payload assembled successfully",
-                    "scraperPayload", scraperRequest
-            ));
+            return ResponseEntity.accepted().body(Map.of("taskId", taskId, "status", "PROCESSING"));
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Failed to parse PDF: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Failed: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/status/{taskId}")
+    public ResponseEntity<?> getStatus(@PathVariable String taskId) {
+        Optional<MatchTask> taskOptional = taskRepository.findById(taskId);
+
+        if (taskOptional.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Task not found or already completed/deleted"));
+        }
+
+        MatchTask task = taskOptional.get();
+
+        if (task.getStatus() == MatchTask.TaskStatus.PROCESSING) {
+            return ResponseEntity.ok(Map.of("taskId", taskId, "status", "PROCESSING"));
+        }
+
+        String responsePayload = task.getResultPayload();
+        String responseStatus = task.getStatus().name();
+
+        taskRepository.deleteById(taskId);
+
+        return ResponseEntity.ok(Map.of(
+                "taskId", taskId,
+                "status", responseStatus,
+                "result", responsePayload
+        ));
     }
 }

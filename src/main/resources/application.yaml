@@ -2,10 +2,14 @@ spring:
   application:
     name: AtsRagBackend
 
+  threads:
+    virtual:
+      enabled: true
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/${DB_NAME:ats_db}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:Pg@123456}
+    url: jdbc:postgresql://localhost:5432/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -25,6 +29,11 @@ spring:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         dimensions: 768
+
+# Apify configuration mapping for ApifyService.java
+apify:
+  api:
+    token: ${APIFY_API_TOKEN}
 
 management:
   endpoints:
@@ -46,10 +55,10 @@ logging:
 ---
 
 spring:
-    config:
-      activate:
-        on-profile: dev
-      import:
-        - optional:file:.env[.properties]
-    jpa:
-      show-sql: true
+  config:
+    activate:
+      on-profile: dev
+    import:
+      - optional:file:.env[.properties]
+  jpa:
+    show-sql: true

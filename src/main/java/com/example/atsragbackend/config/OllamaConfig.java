@@ -78,7 +78,7 @@ public class OllamaConfig {
         OllamaChatOptions chatOptions = OllamaChatOptions.builder()
                 .model(chatModelName)
                 .numCtx(4096)
-                .format(OllamaChatOptions.builder().format("JSON").build())
+                .format("json")
                 .outputSchema(REQUEST_BODY_JSON_SCHEMA)
                 .disableThinking()
                 .build();
