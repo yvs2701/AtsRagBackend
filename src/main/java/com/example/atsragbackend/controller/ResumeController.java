@@ -1,14 +1,18 @@
 package com.example.atsragbackend.controller;
 
 import com.example.atsragbackend.entity.MatchTask;
+import com.example.atsragbackend.model.JdMatchResult;
 import com.example.atsragbackend.repository.MatchTaskRepository;
 import com.example.atsragbackend.service.JobMatchService;
 import com.example.atsragbackend.service.ResumeParsingService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,11 +25,16 @@ public class ResumeController {
     private final ResumeParsingService parsingService;
     private final JobMatchService jobMatchService;
     private final MatchTaskRepository taskRepository;
+    private final ObjectMapper objectMapper;
 
-    public ResumeController(ResumeParsingService parsingService, JobMatchService jobMatchService, MatchTaskRepository taskRepository) {
+    public ResumeController(ResumeParsingService parsingService,
+                            JobMatchService jobMatchService,
+                            MatchTaskRepository taskRepository,
+                            ObjectMapper objectMapper) {
         this.parsingService = parsingService;
         this.jobMatchService = jobMatchService;
         this.taskRepository = taskRepository;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -76,12 +85,23 @@ public class ResumeController {
         String responsePayload = task.getResultPayload();
         String responseStatus = task.getStatus().name();
 
+        List<JdMatchResult> parsedResult = null;
+        try {
+            if (task.getStatus() == MatchTask.TaskStatus.SUCCESS && responsePayload != null && !responsePayload.isBlank()) {
+                parsedResult = objectMapper.readValue(responsePayload,
+                        new TypeReference<>() {});
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Failed to parse result payload: " + e.getMessage()));
+        }
+
         taskRepository.deleteById(taskId);
+        parsedResult = parsedResult != null ? parsedResult : List.of();
 
         return ResponseEntity.ok(Map.of(
                 "taskId", taskId,
                 "status", responseStatus,
-                "result", responsePayload
+                "result", parsedResult
         ));
     }
 }

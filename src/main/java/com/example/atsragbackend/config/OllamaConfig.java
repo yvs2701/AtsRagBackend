@@ -31,21 +31,8 @@ public class OllamaConfig {
     private static final String MODEL_NAME_MAC = "gemma4:e4b-mlx";
     private static final String MODEL_NAME_OTHER = "gemma4:e4b";
     private static final String EMBEDDING_MODEL_NAME = "nomic-embed-text";
-    private static final String REQUEST_BODY_JSON_SCHEMA = """
-            {
-                "type": "object",
-                "properties": {
-                    "searchQuery": { "type": "string" },
-                    "searchQueries": {
-                        "type": "array",
-                        "items": { "type": "string" }
-                    }
-                },
-                "required": ["searchQuery", "searchQueries"]
-            }
-            """;
 
-    // 1. Centralize the base URL connection
+    // Centralize the base URL connection
     @Bean
     public OllamaApi ollamaApi(RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
         Duration timeout = Duration.ofMinutes(AI_REQUEST_TIMEOUT_MINUTES);
@@ -69,7 +56,7 @@ public class OllamaConfig {
                 .build();
     }
 
-    // 2. Configure the Generation/Chat model
+    // Configure the Generation/Chat model
     @Bean
     public OllamaChatModel ollamaChatModel(OllamaApi ollamaApi) {
         String chatModelName = OS_NAME.contains(MAC_OS_IDENTIFIER) ? MODEL_NAME_MAC : MODEL_NAME_OTHER;
@@ -78,8 +65,6 @@ public class OllamaConfig {
         OllamaChatOptions chatOptions = OllamaChatOptions.builder()
                 .model(chatModelName)
                 .numCtx(4096)
-                .format("json")
-                .outputSchema(REQUEST_BODY_JSON_SCHEMA)
                 .disableThinking()
                 .build();
 
@@ -94,7 +79,7 @@ public class OllamaConfig {
                 .build();
     }
 
-    // 3. Configure the Retrieval/Embedding model
+    // Configure the Retrieval/Embedding model
     @Bean
     public OllamaEmbeddingModel ollamaEmbeddingModel(OllamaApi ollamaApi) {
         OllamaEmbeddingOptions embeddingOptions = OllamaEmbeddingOptions.builder()

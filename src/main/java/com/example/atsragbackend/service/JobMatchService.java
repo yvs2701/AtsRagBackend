@@ -3,12 +3,11 @@ package com.example.atsragbackend.service;
 import com.example.atsragbackend.entity.MatchTask;
 import com.example.atsragbackend.model.ApifyJob;
 import com.example.atsragbackend.model.ApifyScraperRequest;
+import com.example.atsragbackend.model.JdMatchResult;
 import com.example.atsragbackend.model.JobSearchQuery;
 import com.example.atsragbackend.repository.MatchTaskRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -21,8 +20,6 @@ import java.util.UUID;
 
 @Service
 public class JobMatchService {
-
-    private static final Logger log = LoggerFactory.getLogger(JobMatchService.class);
 
     private final MatchTaskRepository repository;
     private final ResumeAnalyzerService analyzerService;
@@ -42,7 +39,7 @@ public class JobMatchService {
         this.vectorStore = vectorStore;
     }
 
-    @Async // Removed the explicit task executor name to use virtual threads
+    @Async
     public void processResumeTask(String taskId, String extractedText, String location, String experienceLevel, String jobType, String workplaceType, String datePosted) {
         try {
             JobSearchQuery searchQuery = analyzerService.generateSearchQuery(extractedText);
@@ -52,7 +49,6 @@ public class JobMatchService {
             );
 
             String scrapedJobsJson = apifyService.scrapeJobs(scraperRequest);
-            log.debug("scrapedJobsJson: {}", scrapedJobsJson);
             List<ApifyJob> scrapedJobs = objectMapper.readValue(scrapedJobsJson, new TypeReference<>() {
             });
 
@@ -62,16 +58,29 @@ public class JobMatchService {
             }
 
             List<Document> documents = scrapedJobs.stream()
-                    .map(job -> new Document(
-                            UUID.randomUUID().toString(),
-                            job.description() != null ? job.description() : "",
-                            Map.of(
-                                    "taskId", taskId,
-                                    "title", job.title() != null ? job.title() : "Unknown",
-                                    "company", job.companyName() != null ? job.companyName() : "Unknown", // Updated here
-                                    "url", job.url() != null ? job.url() : ""
-                            )
-                    ))
+                    .map(job -> {
+                        final String jobDescription = String.format(
+                                "Job Title: %s\nSeniority: %s\nEmployment Type: %s\nDescription: %s",
+                                job.title() != null ? job.title() : "Unknown",
+                                job.seniorityLevel() != null ? job.seniorityLevel() : "Unknown",
+                                job.employmentType() != null ? job.employmentType() : "Unknown",
+                                job.descriptionText() != null ? job.descriptionText() : ""
+                        );
+
+                        return new Document(
+                                UUID.randomUUID().toString(),
+                                jobDescription,
+                                Map.of(
+                                        "taskId", taskId,
+                                        "title", job.title() != null ? job.title() : "Unknown",
+                                        "company", job.companyName() != null ? job.companyName() : "Unknown",
+                                        "location", job.location() != null ? job.location() : "Unknown",
+                                        "url", job.url() != null ? job.url() : "",
+                                        "seniorityLevel", job.seniorityLevel() != null ? job.seniorityLevel() : "Unknown",
+                                        "employmentType", job.employmentType() != null ? job.employmentType() : "Unknown"
+                                )
+                        );
+                    })
                     .toList();
 
             vectorStore.add(documents);
@@ -79,27 +88,26 @@ public class JobMatchService {
             SearchRequest searchRequest = SearchRequest.builder()
                     .query(extractedText)
                     .topK(5)
-                    .filterExpression("taskId == '" + taskId + "'")
+                    .filterExpression(String.format("taskId == '%s'", taskId))
                     .build();
 
             List<Document> topMatches = vectorStore.similaritySearch(searchRequest);
 
-            List<Map<String, Object>> bestJobs = topMatches.stream() // Use .parallelStream() if your Ollama instance is configured for concurrent requests
+            List<JdMatchResult> bestJobs = topMatches.stream()
                     .map(doc -> {
                         Object distanceObj = doc.getMetadata().get("distance");
                         double distance = distanceObj instanceof Number ? ((Number) distanceObj).doubleValue() : 0.0;
                         long matchScore = Math.round((1.0 - distance) * 100.0);
 
-                        // Generate the AI reason by comparing the resume to the scraped job description
-                        String reason = analyzerService.generateMatchReason(extractedText,
-                                doc.getText());
+                        final String jdTextContent = doc.getText();
+                        String reason = analyzerService.generateMatchReason(extractedText, jdTextContent);
 
-                        return Map.of(
-                                "title", doc.getMetadata().get("title"),
-                                "company", doc.getMetadata().get("company"),
-                                "url", doc.getMetadata().get("url"),
-                                "matchScore", matchScore,
-                                "reason", reason // Added reason field
+                        return new JdMatchResult(
+                                (String) doc.getMetadata().get("title"),
+                                (String) doc.getMetadata().get("company"),
+                                (String) doc.getMetadata().get("url"),
+                                matchScore,
+                                reason
                         );
                     })
                     .toList();
