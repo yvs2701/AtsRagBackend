@@ -19,12 +19,6 @@ spring:
       max-request-size: 5MB
 
   ai:
-    ollama:
-      base-url: http://localhost:11434
-      chat:
-        model: llama3.2
-      embedding:
-        model: nomic-embed-text
     vectorstore:
       pgvector:
         initialize-schema: true
@@ -44,6 +38,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     operations-sorter: method
+
+logging:
+  level:
+    com.example.atsragbackend.*: DEBUG
 
 ---
 

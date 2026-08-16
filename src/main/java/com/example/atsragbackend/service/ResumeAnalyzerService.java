@@ -1,11 +1,15 @@
 package com.example.atsragbackend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.example.atsragbackend.dto.JobSearchQuery;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ResumeAnalyzerService {
+
+    private static final Logger log = LoggerFactory.getLogger(ResumeAnalyzerService.class);
 
     private final ChatClient chatClient;
 
@@ -25,12 +29,14 @@ public class ResumeAnalyzerService {
                 {resume}
                 """;
 
-        return this.chatClient.prompt()
+        JobSearchQuery jobSearchQuery = this.chatClient.prompt()
                 .user(userSpec -> userSpec
                         .text(promptTemplate)
                         .param("resume", resumeText)
                 )
                 .call()
                 .entity(JobSearchQuery.class);
+        log.debug("Generated JobSearchQuery: {}", jobSearchQuery);
+        return jobSearchQuery;
     }
 }
