@@ -8,6 +8,8 @@ import com.example.atsragbackend.model.JobSearchQuery;
 import com.example.atsragbackend.repository.MatchTaskRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -20,6 +22,8 @@ import java.util.UUID;
 
 @Service
 public class JobMatchService {
+
+    private static final Logger log = LoggerFactory.getLogger(JobMatchService.class);
 
     private final MatchTaskRepository repository;
     private final ResumeAnalyzerService analyzerService;
@@ -41,22 +45,30 @@ public class JobMatchService {
 
     @Async
     public void processResumeTask(String taskId, String extractedText, String location, String experienceLevel, String jobType, String workplaceType, String datePosted) {
+        log.info("Starting processing for taskId: {}. Location: {}, Experience: {}, JobType: {}, WorkplaceType: {}, DatePosted: {}", taskId, location, experienceLevel, jobType, workplaceType, datePosted);
+
         try {
+            log.info("Generating search queries from resume text for taskId: {}", taskId);
             JobSearchQuery searchQuery = analyzerService.generateSearchQuery(extractedText);
 
             ApifyScraperRequest scraperRequest = ApifyScraperRequest.of(
                     searchQuery, location, experienceLevel, jobType, workplaceType, datePosted
             );
 
+            log.info("Triggering Apify scraper for taskId: {}", taskId);
             String scrapedJobsJson = apifyService.scrapeJobs(scraperRequest);
-            List<ApifyJob> scrapedJobs = objectMapper.readValue(scrapedJobsJson, new TypeReference<>() {
-            });
+            List<ApifyJob> scrapedJobs = objectMapper.readValue(scrapedJobsJson,
+                    new TypeReference<>() {
+                    });
+            log.info("Scraped {} jobs from Apify for taskId: {}", scrapedJobs.size(), taskId);
 
             if (scrapedJobs.isEmpty()) {
+                log.warn("No jobs returned from Apify scraper for taskId: {}. Completing task with empty results.", taskId);
                 updateTaskStatus(taskId, MatchTask.TaskStatus.SUCCESS, "[]");
                 return;
             }
 
+            log.debug("Mapping {} scraped jobs to VectorStore documents for taskId: {}", scrapedJobs.size(), taskId);
             List<Document> documents = scrapedJobs.stream()
                     .map(job -> {
                         final String jobDescription = String.format(
@@ -83,8 +95,10 @@ public class JobMatchService {
                     })
                     .toList();
 
+            log.debug("Adding documents to VectorStore for taskId: {}", taskId);
             vectorStore.add(documents);
 
+            log.info("Executing similarity search for taskId: {}", taskId);
             SearchRequest searchRequest = SearchRequest.builder()
                     .query(extractedText)
                     .topK(5)
@@ -92,7 +106,9 @@ public class JobMatchService {
                     .build();
 
             List<Document> topMatches = vectorStore.similaritySearch(searchRequest);
+            log.info("Found {} top matches for taskId: {}", topMatches.size(), taskId);
 
+            log.info("Generating AI match reasons and calculating scores for taskId: {}", taskId);
             List<JdMatchResult> bestJobs = topMatches.stream()
                     .map(doc -> {
                         Object distanceObj = doc.getMetadata().get("distance");
@@ -116,10 +132,14 @@ public class JobMatchService {
 
             updateTaskStatus(taskId, MatchTask.TaskStatus.SUCCESS, finalResultJson);
 
+            log.info("Deleting {} temporary vector documents from VectorStore for taskId: {}", documents.size(), taskId);
             List<String> documentIds = documents.stream().map(Document::getId).toList();
             vectorStore.delete(documentIds);
 
+            log.info("Successfully processed resume task for taskId: {}", taskId);
+
         } catch (Exception e) {
+            log.error("Error processing resume task {}: {}", taskId, e.getMessage(), e);
             updateTaskStatus(taskId, MatchTask.TaskStatus.FAILED, e.getMessage());
         }
     }
@@ -129,6 +149,7 @@ public class JobMatchService {
             task.setStatus(status);
             task.setResultPayload(payload);
             repository.save(task);
+            log.info("Task {} updated to status: {}, and payload: {}", taskId, status, payload);
         });
     }
 }

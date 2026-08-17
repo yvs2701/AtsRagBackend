@@ -59,7 +59,7 @@ public class ResumeAnalyzerService {
                 .call()
                 .entity(JobSearchQuery.class);
 
-        log.debug("Generated JobSearchQuery: {}", jobSearchQuery);
+        log.info("Generated JobSearchQuery: {}", jobSearchQuery);
         return jobSearchQuery;
     }
 
@@ -78,7 +78,7 @@ public class ResumeAnalyzerService {
                 """;
 
         // Omitting .options() defaults back to plain text generation
-        return this.chatClient.prompt()
+        String matchReason = this.chatClient.prompt()
                 .system(systemPrompt)
                 .user(userSpec -> userSpec
                         .text(userPromptTemplate)
@@ -87,5 +87,7 @@ public class ResumeAnalyzerService {
                 )
                 .call()
                 .content();
+        log.info("Generated match reason: {}", matchReason);
+        return matchReason;
     }
 }

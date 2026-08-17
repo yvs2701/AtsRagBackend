@@ -28,6 +28,6 @@ public class TaskCleanupService {
     public void cleanUpOrphanedTasks() {
         Instant oneHourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
         taskRepository.deleteByCreatedAtBefore(oneHourAgo);
-        log.debug("Executed routine cleanup for orphaned MatchTask records.");
+        log.info("Executed routine cleanup for orphaned MatchTask records.");
     }
 }

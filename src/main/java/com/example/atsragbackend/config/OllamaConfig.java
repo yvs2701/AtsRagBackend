@@ -48,7 +48,7 @@ public class OllamaConfig {
                 .responseTimeout(timeout);
         webClientBuilder.clientConnector(new ReactorClientHttpConnector(httpClient));
 
-        log.debug("Configuring OllamaApi with base URL: {}", BASE_URL);
+        log.info("Configuring OllamaApi with base URL: {}", BASE_URL);
         return OllamaApi.builder()
                 .baseUrl(BASE_URL)
                 .restClientBuilder(restClientBuilder)
@@ -60,7 +60,7 @@ public class OllamaConfig {
     @Bean
     public OllamaChatModel ollamaChatModel(OllamaApi ollamaApi) {
         String chatModelName = OS_NAME.contains(MAC_OS_IDENTIFIER) ? MODEL_NAME_MAC : MODEL_NAME_OTHER;
-        log.debug("Detected OS: {}. Using chat model: {}", OS_NAME, chatModelName);
+        log.info("Detected OS: {}. Using chat model: {}", OS_NAME, chatModelName);
 
         OllamaChatOptions chatOptions = OllamaChatOptions.builder()
                 .model(chatModelName)

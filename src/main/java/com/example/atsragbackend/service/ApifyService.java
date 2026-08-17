@@ -65,11 +65,22 @@ public class ApifyService {
                 log.info("Apify run {} status: {}", runId, status);
 
                 if ("SUCCEEDED".equals(status)) {
-                    String datasetId = statusResponse.path("data").path("defaultDatasetId").asText();
-                    return restClient.get()
-                            .uri("/datasets/{datasetId}/items?token={token}", datasetId, apiToken)
-                            .retrieve()
-                            .body(String.class);
+                    String datasetId = statusResponse.path("data")
+                            .path("defaultDatasetId").asText();
+                    log.info("Apify run {} succeeded. Fetching results from dataset ID: {}", runId, datasetId);
+                    try {
+                        String datasetResult = restClient.get()
+                                .uri("/datasets/{datasetId}/items?token={token}",
+                                        datasetId, apiToken)
+                                .retrieve()
+                                .body(String.class);
+                        log.info("Successfully fetched dataset items for run {} (Dataset ID: {})", runId, datasetId);
+                        return datasetResult;
+
+                    } catch (Exception e) {
+                        log.error("Failed to fetch scraped dataset for Apify run {} (Dataset ID: {}). Error: {}", runId, datasetId, e.getMessage(), e);
+                        throw new RuntimeException("Error fetching Apify dataset: " + e.getMessage(), e);
+                    }
                 } else if ("FAILED".equals(status) || "ABORTED".equals(status)) {
                     throw new RuntimeException("Apify scraper failed with status: " + status);
                 }

@@ -50,7 +50,7 @@ springdoc:
 
 logging:
   level:
-    com.example.atsragbackend.*: DEBUG
+    root: info
 
 ---
 
@@ -62,3 +62,12 @@ spring:
       - optional:file:.env[.properties]
   jpa:
     show-sql: true
+logging:
+  level:
+    com.example.atsragbackend.*: DEBUG
+    # Logs the raw HTTP requests, JSON payloads, and options sent to Ollama API
+    #org.springframework.ai.ollama: TRACE
+    # Logs the high-level ChatClient prompt construction and responses
+    #org.springframework.ai.chat.client: DEBUG
+    # Logs the underlying Spring RestClient HTTP traffic
+    #org.springframework.web.client.RestClient: DEBUG
