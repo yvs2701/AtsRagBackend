@@ -45,7 +45,7 @@ public class ResumeAnalyzerService {
                 Resume Text:
                 {resume}
                 """;
-
+        log.info("Generating JobSearchQuery for resume text.");
         JobSearchQuery jobSearchQuery = this.chatClient.prompt()
                 .system(systemPrompt)
                 .user(userSpec -> userSpec
@@ -78,6 +78,7 @@ public class ResumeAnalyzerService {
                 """;
 
         // Omitting .options() defaults back to plain text generation
+        log.info("Generating match reason for resume and job description.");
         String matchReason = this.chatClient.prompt()
                 .system(systemPrompt)
                 .user(userSpec -> userSpec
@@ -87,7 +88,7 @@ public class ResumeAnalyzerService {
                 )
                 .call()
                 .content();
-        log.info("Generated match reason: {}", matchReason);
+        log.debug("Generated match reason: {}", matchReason);
         return matchReason;
     }
 }
