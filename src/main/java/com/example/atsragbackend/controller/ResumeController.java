@@ -2,11 +2,16 @@ package com.example.atsragbackend.controller;
 
 import com.example.atsragbackend.entity.MatchTask;
 import com.example.atsragbackend.model.JdMatchResult;
+import com.example.atsragbackend.model.ResumeUploadRequest;
 import com.example.atsragbackend.repository.MatchTaskRepository;
 import com.example.atsragbackend.service.JobMatchService;
 import com.example.atsragbackend.service.ResumeParsingService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -42,20 +47,27 @@ public class ResumeController {
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> uploadResume(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "location", defaultValue = "") String location,
-            @RequestParam(value = "experienceLevel", defaultValue = "all") String experienceLevel,
-            @RequestParam(value = "jobType", defaultValue = "all") String jobType,
-            @RequestParam(value = "workplaceType", defaultValue = "all") String workplaceType,
-            @RequestParam(value = "datePosted", defaultValue = "all") String datePosted
-    ) {
-        log.info("Received resume upload request. Filename: {}, Size: {} bytes. Location: {}, Experience: {}, JobType: {}",
-                file != null ? file.getOriginalFilename() : "null",
-                file != null ? file.getSize() : 0,
-                location, experienceLevel, jobType);
+    @Operation(
+            summary = "Upload a resume for job matching",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(
+                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                            schema = @Schema(implementation = ResumeUploadRequest.class)
+                    )
+            )
+    )
+    public ResponseEntity<?> uploadResume(@Valid @ModelAttribute ResumeUploadRequest request) {
 
-        if (file == null || file.isEmpty()) {
+        MultipartFile file = request.file();
+
+        log.info("Received resume upload request. Filename: {}, Size: {} bytes. Location: {}, Experience: {}, JobType: {}",
+                file.getOriginalFilename(),
+                file.getSize(),
+                request.location(),
+                request.experienceLevel(),
+                request.jobType());
+
+        if (file.isEmpty()) {
             log.warn("Upload rejected: File is missing or empty.");
             return ResponseEntity.badRequest().body(Map.of("error", "File is missing"));
         }
@@ -66,6 +78,7 @@ public class ResumeController {
         }
 
         try {
+            log.debug("Extracting text from uploaded PDF...");
             String extractedText = parsingService.extractText(file);
             String taskId = UUID.randomUUID().toString();
 
@@ -75,7 +88,13 @@ public class ResumeController {
 
             log.debug("Dispatching async job matching process for task ID: {}", taskId);
             jobMatchService.processResumeTask(
-                    taskId, extractedText, location, experienceLevel, jobType, workplaceType, datePosted
+                    taskId,
+                    extractedText,
+                    request.location(),
+                    request.experienceLevel(),
+                    request.jobType(),
+                    request.workplaceType(),
+                    request.datePosted()
             );
 
             return ResponseEntity.accepted().body(Map.of("taskId", taskId, "status", "PROCESSING"));
@@ -88,6 +107,14 @@ public class ResumeController {
 
     @GetMapping("/status/{taskId}")
     public ResponseEntity<?> getStatus(@PathVariable String taskId) {
+        // Enforce strict UUID format to sanitize input and prevent log injection
+        try {
+            UUID.fromString(taskId);
+        } catch (IllegalArgumentException e) {
+            log.warn("Status check failed: Invalid task ID format received.");
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid task ID"));
+        }
+
         log.debug("Status check requested for task ID: {}", taskId);
 
         Optional<MatchTask> taskOptional = taskRepository.findById(taskId);

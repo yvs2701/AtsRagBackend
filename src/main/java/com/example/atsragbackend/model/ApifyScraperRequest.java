@@ -27,13 +27,13 @@ public record ApifyScraperRequest(
         return new ApifyScraperRequest(
                 query.searchQuery(),
                 query.searchQueries(),
-                (location != null && !location.isBlank()) ? location : "",
-                20,
-                (jobType != null && !jobType.isBlank()) ? jobType : "all",
-                (experienceLevel != null && !experienceLevel.isBlank()) ? experienceLevel : "all",
-                (workplaceType != null && !workplaceType.isBlank()) ? workplaceType : "all",
-                (datePosted != null && !datePosted.isBlank()) ? datePosted : "all",
-                true
+                location,
+                50, // Default maxJobs
+                jobType,
+                experienceLevel,
+                workplaceType,
+                datePosted,
+                true // scrapeJobDetails
         );
     }
 }

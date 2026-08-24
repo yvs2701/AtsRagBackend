@@ -23,8 +23,8 @@ public class ApifyService {
     private final String apiToken;
     private final ObjectMapper objectMapper;
     private static final String ACTOR_ID = "automation-lab~linkedin-jobs-scraper";
-    private static final int RETRY_DELAY_SECONDS = 10; // retry every 10 seconds
-    private static final int MAX_RETRIES = 60; // Retry 60 times (60 * 10s = 600s = 10 minutes)
+    private static final int RETRY_DELAY_SECONDS = 15; // retry every 15 seconds
+    private static final int MAX_RETRIES = 40; // Retry 60 times (40 * 15s = 600s = 10 minutes)
 
     public ApifyService(WebClient.Builder webClientBuilder,
                         @Value("${apify.api.token}") String apiToken,
@@ -73,7 +73,11 @@ public class ApifyService {
                                 String datasetId = statusResponse.path("data").path("defaultDatasetId").asText();
                                 log.info("Apify run {} succeeded. Fetching results from dataset ID: {}", runId, datasetId);
 
-                                return webClient.get()
+                                return webClient.mutate()
+                                        // set max in-memory size to 512KB
+                                        .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(512 * 1024))
+                                        .build()
+                                        .get()
                                         .uri("/datasets/{datasetId}/items?token={token}", datasetId, apiToken)
                                         .retrieve()
                                         .bodyToMono(String.class)
@@ -90,7 +94,6 @@ public class ApifyService {
                             return Mono.error(e);
                         }
                     })
-                    // Retry up to 60 times (10 minutes total) with a fixed 10-second delay.
                     // Only retries if the error is our custom ApifyJobStillRunningException.
                     .retryWhen(Retry.fixedDelay(MAX_RETRIES, Duration.ofSeconds(RETRY_DELAY_SECONDS))
                             .filter(throwable ->
