@@ -6,6 +6,7 @@ import com.example.atsragbackend.model.ApifyScraperRequest;
 import com.example.atsragbackend.model.JdMatchResult;
 import com.example.atsragbackend.model.JobSearchQuery;
 import com.example.atsragbackend.repository.MatchTaskRepository;
+import com.example.atsragbackend.util.ExperienceFilterUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -68,8 +69,34 @@ public class JobMatchService {
                 return;
             }
 
-            log.debug("Mapping {} scraped jobs to VectorStore documents for taskId: {}", scrapedJobs.size(), taskId);
-            List<Document> documents = scrapedJobs.stream()
+            // --- PRE-FILTERING STEP ---
+            int targetYoe = ExperienceFilterUtil.mapExperienceLevelToYears(experienceLevel);
+
+            List<ApifyJob> filteredJobs = scrapedJobs.stream()
+                    .filter(job -> {
+                        String description = job.descriptionText();
+                        boolean matches = ExperienceFilterUtil.isWithinExperienceRange(description, targetYoe);
+
+                        if (!matches) {
+                            int req = ExperienceFilterUtil.extractRequiredYears(description);
+                            log.info("Filtering out job '{}' at '{}' - Required YoE: {}, Target YoE: {}",
+                                    job.title(), job.companyName(), req, targetYoe);
+                        }
+                        return matches;
+                    })
+                    .toList();
+
+            log.info("Jobs remaining after YoE pre-filtering: {} / {}", filteredJobs.size(), scrapedJobs.size());
+
+            if (filteredJobs.isEmpty()) {
+                log.warn("All jobs were filtered out due to YoE mismatch for taskId: {}", taskId);
+                updateTaskStatus(taskId, MatchTask.TaskStatus.SUCCESS, "[]");
+                return;
+            }
+
+            // Convert only the filtered jobs to VectorStore documents
+            log.debug("Mapping {} filtered jobs to VectorStore documents for taskId: {}", filteredJobs.size(), taskId);
+            List<Document> documents = filteredJobs.stream()
                     .map(job -> {
                         final String jobDescription = String.format(
                                 "Job Title: %s\nSeniority: %s\nEmployment Type: %s\nDescription: %s",
