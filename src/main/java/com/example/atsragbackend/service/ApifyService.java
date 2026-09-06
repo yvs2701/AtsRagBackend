@@ -1,9 +1,9 @@
 package com.example.atsragbackend.service;
 
 import com.example.atsragbackend.exception.ApifyJobStillRunningException;
+import com.example.atsragbackend.model.ApifyJob;
+import com.example.atsragbackend.model.ApifyRunResponse;
 import com.example.atsragbackend.model.ApifyScraperRequest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +14,8 @@ import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 public class ApifyService {
@@ -21,66 +23,67 @@ public class ApifyService {
     private static final Logger log = LoggerFactory.getLogger(ApifyService.class);
     private final WebClient webClient;
     private final String apiToken;
-    private final ObjectMapper objectMapper;
     private static final String ACTOR_ID = "automation-lab~linkedin-jobs-scraper";
     private static final int RETRY_DELAY_SECONDS = 15; // retry every 15 seconds
     private static final int MAX_RETRIES = 40; // Retry 60 times (40 * 15s = 600s = 10 minutes)
 
+    // Extract field names to fetch from the dataset in Apify storage
+    private static final String requiredFields = String.join(",", Arrays.asList(
+            "title", "location", "companyName", "url", "descriptionText",
+            "seniorityLevel", "employmentType"));
+
     public ApifyService(WebClient.Builder webClientBuilder,
-                        @Value("${apify.api.token}") String apiToken,
-                        ObjectMapper objectMapper) {
+                        @Value("${apify.api.token}") String apiToken) {
         this.webClient = webClientBuilder.baseUrl("https://api.apify.com/v2").build();
         this.apiToken = apiToken;
-        this.objectMapper = objectMapper;
     }
 
-    public String scrapeJobs(ApifyScraperRequest request) {
+    public List<ApifyJob> scrapeJobs(ApifyScraperRequest request) {
         try {
-            String runResponseStr = webClient.post()
+            ApifyRunResponse runResponse = webClient.post()
                     .uri("/acts/{actorId}/runs?token={token}", ACTOR_ID, apiToken)
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(request)
                     .retrieve()
-                    .bodyToMono(String.class)
+                    .bodyToMono(ApifyRunResponse.class)
                     .block(); // Called by @Async code. Safe to block the thread here.
 
-            JsonNode runResponse = objectMapper.readTree(runResponseStr);
-
-            if (runResponse == null || !runResponse.hasNonNull("data")) {
+            if (runResponse == null || runResponse.data() == null || runResponse.data().id() == null) {
                 throw new RuntimeException("Invalid response from Apify upon triggering the actor.");
             }
 
-            String runId = runResponse.path("data").path("id").asText();
+            String runId = runResponse.data().id();
             log.info("Started Apify run with ID: {}", runId);
 
             // Create a reactive pipeline that fetches status and retries every 10s if not finished
             return Mono.defer(() -> webClient.get()
                             .uri("/actor-runs/{runId}?token={token}", runId, apiToken)
                             .retrieve()
-                            .bodyToMono(String.class))
-                    .flatMap(statusResponseStr -> {
+                            .bodyToMono(ApifyRunResponse.class))
+                    .flatMap(statusResponse -> {
                         try {
-                            JsonNode statusResponse = objectMapper.readTree(statusResponseStr);
-
-                            if (statusResponse == null || !statusResponse.hasNonNull("data")) {
+                            if (statusResponse.data() == null) {
                                 return Mono.error(new RuntimeException("Received null or malformed status response from Apify."));
                             }
 
-                            String status = statusResponse.path("data").path("status").asText();
+                            String status = statusResponse.data().status();
                             log.info("Apify run {} status: {}", runId, status);
 
                             if ("SUCCEEDED".equals(status)) {
-                                String datasetId = statusResponse.path("data").path("defaultDatasetId").asText();
+                                String datasetId = statusResponse.data().defaultDatasetId();
                                 log.info("Apify run {} succeeded. Fetching results from dataset ID: {}", runId, datasetId);
 
-                                return webClient.mutate()
-                                        // set max in-memory size to 512KB
-                                        .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(512 * 1024))
-                                        .build()
+                                return webClient
                                         .get()
-                                        .uri("/datasets/{datasetId}/items?token={token}", datasetId, apiToken)
+                                        .uri(uriBuilder -> uriBuilder
+                                                .path("/datasets/{datasetId}/items")
+                                                .queryParam("token", apiToken)
+                                                // Only fetch the fields required to deserialize into ApifyJob
+                                                .queryParam("fields", requiredFields)
+                                                .build(datasetId))
                                         .retrieve()
-                                        .bodyToMono(String.class)
+                                        .bodyToFlux(ApifyJob.class)
+                                        .collectList()
                                         .doOnSuccess(res -> log.info("Successfully fetched dataset items for Apify run {} (Dataset ID: {})", runId, datasetId))
                                         .doOnError(e -> log.error("Failed to fetch scraped dataset for Apify run {} (Dataset ID: {}). Error: {}", runId, datasetId, e.getMessage(), e));
 

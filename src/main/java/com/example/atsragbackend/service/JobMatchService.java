@@ -7,7 +7,6 @@ import com.example.atsragbackend.model.JdMatchResult;
 import com.example.atsragbackend.model.JobSearchQuery;
 import com.example.atsragbackend.repository.MatchTaskRepository;
 import com.example.atsragbackend.util.ExperienceFilterUtil;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,10 +57,7 @@ public class JobMatchService {
             );
 
             log.info("Triggering Apify scraper for taskId: {}", taskId);
-            String scrapedJobsJson = apifyService.scrapeJobs(scraperRequest);
-            List<ApifyJob> scrapedJobs = objectMapper.readValue(scrapedJobsJson,
-                    new TypeReference<>() {
-                    });
+            List<ApifyJob> scrapedJobs = apifyService.scrapeJobs(scraperRequest);
             log.info("Scraped {} jobs from Apify for taskId: {}", scrapedJobs.size(), taskId);
 
             if (scrapedJobs.isEmpty()) {
@@ -70,7 +66,7 @@ public class JobMatchService {
                 return;
             }
 
-            // --- PRE-FILTERING STEP ---
+            // Filter jobs based on experience level mentioned in the job's description
             int targetYoe = ExperienceFilterUtil.mapExperienceLevelToYears(experienceLevel);
 
             List<ApifyJob> filteredJobs = scrapedJobs.stream()
