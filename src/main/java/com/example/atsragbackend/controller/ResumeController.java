@@ -35,6 +35,7 @@ public class ResumeController {
     private final JobMatchService jobMatchService;
     private final MatchTaskRepository taskRepository;
     private final ObjectMapper objectMapper;
+    private final TypeReference<List<JdMatchResult>> jdMatchResultTypeReference;
 
     public ResumeController(ResumeParsingService parsingService,
                             JobMatchService jobMatchService,
@@ -44,6 +45,8 @@ public class ResumeController {
         this.jobMatchService = jobMatchService;
         this.taskRepository = taskRepository;
         this.objectMapper = objectMapper;
+        this.jdMatchResultTypeReference = new TypeReference<>() {
+        };
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -140,8 +143,7 @@ public class ResumeController {
         try {
             if (task.getStatus() == MatchTask.TaskStatus.SUCCESS && responsePayload != null && !responsePayload.isBlank()) {
                 log.debug("Parsing JSON result payload for task ID: {}", taskId);
-                parsedResult = objectMapper.readValue(responsePayload, new TypeReference<>() {
-                });
+                parsedResult = objectMapper.readValue(responsePayload, jdMatchResultTypeReference);
             }
         } catch (Exception e) {
             log.error("Failed to parse result payload for task ID {}: {}", taskId, e.getMessage(), e);
