@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -172,11 +173,15 @@ public class JobMatchService {
     }
 
     private void updateTaskStatus(String taskId, MatchTask.TaskStatus status, String payload) {
-        repository.findById(taskId).ifPresent(task -> {
+        Optional<MatchTask> result = repository.findById(taskId);
+        if (result.isPresent()) {
+            MatchTask task = result.get();
             task.setStatus(status);
             task.setResultPayload(payload);
             repository.save(task);
             log.info("Task {} updated to status: {}, and payload: {}", taskId, status, payload);
-        });
+        } else {
+            log.warn("Attempted to update a task: {}, which does not exist in the repository. Status: {}, Payload: {}", taskId, status, payload);
+        }
     }
 }
