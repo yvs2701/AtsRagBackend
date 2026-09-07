@@ -30,7 +30,10 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 768
 
-# Apify configuration mapping for ApifyService.java
+ollama:
+  api:
+    key: ${OLLAMA_API_KEY}
+
 apify:
   api:
     token: ${APIFY_API_TOKEN}

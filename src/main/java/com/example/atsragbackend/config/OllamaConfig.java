@@ -13,6 +13,8 @@ import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.management.ModelManagementOptions;
 import org.springframework.ai.ollama.management.PullModelStrategy;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -33,20 +35,30 @@ public class OllamaConfig {
     private static final int AI_READ_TIMEOUT_MINUTES = 5;
     private static final int AI_CONNECT_TIMEOUT_SECONDS = 30;
 
-    private static final String BASE_URL = "http://localhost:11434";
-    private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
-    private static final String MAC_OS_IDENTIFIER = "mac";
-    private static final String MODEL_NAME_MAC = "gemma4:e4b-mlx";
-    private static final String MODEL_NAME_OTHER = "gemma4:e4b";
+    private static final String LOCAL_BASE_URL = "http://localhost:11434";
+    private static final String CLOUD_BASE_URL = "https://ollama.com";
+
+    private static final String CHAT_MODEL_NAME = "nemotron-3-nano:30b-cloud";
     private static final String EMBEDDING_MODEL_NAME = "nomic-embed-text";
 
-    // Centralize the base URL connection
+    // Cloud API for Chat LLM (requires authentication)
     @Bean
-    public OllamaApi ollamaApi(RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
+    public OllamaApi cloudOllamaApi(RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder, @Value("${ollama.api.key}") String apiKey) {
+        return buildOllamaApi(CLOUD_BASE_URL, apiKey, restClientBuilder, webClientBuilder);
+    }
+
+    // Local API for Embedding Models (no authentication required)
+    @Bean
+    public OllamaApi localOllamaApi(RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
+        return buildOllamaApi(LOCAL_BASE_URL, null, restClientBuilder, webClientBuilder);
+    }
+
+    // Centralized helper to build OllamaApi with timeouts and optional API key
+    private OllamaApi buildOllamaApi(String baseUrl, String apiKey, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
         Duration readTimeout = Duration.ofMinutes(AI_READ_TIMEOUT_MINUTES);
         Duration connectTimeout = Duration.ofSeconds(AI_CONNECT_TIMEOUT_SECONDS);
 
-        // 1. Configure Synchronous Client
+        // Configure Synchronous Client
         java.net.http.HttpClient nativeHttpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
                 .executor(Executors.newVirtualThreadPerTaskExecutor())
@@ -55,8 +67,8 @@ public class OllamaConfig {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(nativeHttpClient);
         requestFactory.setReadTimeout(readTimeout);
 
-        // Request interceptor for logging
-        restClientBuilder
+        // Clone builder to prevent mutational side effects across the two APIs
+        RestClient.Builder customizedRestClient = restClientBuilder.clone()
                 .requestFactory(requestFactory)
                 .requestInterceptor((request, body, execution) -> {
                     try {
@@ -67,7 +79,7 @@ public class OllamaConfig {
                     }
                 });
 
-        // 2. Configure Asynchronous Client
+        // Configure Asynchronous Client
         HttpClient nettyHttpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) connectTimeout.toMillis())
                 .responseTimeout(readTimeout)
@@ -75,19 +87,25 @@ public class OllamaConfig {
                         .addHandlerLast(new ReadTimeoutHandler(AI_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES))
                         .addHandlerLast(new WriteTimeoutHandler(AI_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES)));
 
-        // Request filter for logging timeouts
-        webClientBuilder
+        WebClient.Builder customizedWebClient = webClientBuilder.clone()
                 .clientConnector(new ReactorClientHttpConnector(nettyHttpClient))
                 .filter((request, next) -> next.exchange(request).onErrorMap(e -> {
                     logOllamaTimeoutViolation(e, request.url().toString());
-                    return e; // Rethrow to let the application handle the failure
+                    return e;
                 }));
 
-        log.info("Configuring OllamaApi with base URL: {} | Read Timeout: {}m | Connect Timeout: {}s", BASE_URL, AI_READ_TIMEOUT_MINUTES, AI_CONNECT_TIMEOUT_SECONDS);
+        // Inject authorization header if connecting to the cloud
+        if (apiKey != null && !apiKey.isBlank()) {
+            customizedRestClient.defaultHeader("Authorization", "Bearer " + apiKey); //
+            customizedWebClient.defaultHeader("Authorization", "Bearer " + apiKey); //
+        }
+
+        log.info("Configuring OllamaApi with base URL: {} | Read Timeout: {}m | Connect Timeout: {}s",
+                baseUrl, AI_READ_TIMEOUT_MINUTES, AI_CONNECT_TIMEOUT_SECONDS);
         return OllamaApi.builder()
-                .baseUrl(BASE_URL)
-                .restClientBuilder(restClientBuilder)
-                .webClientBuilder(webClientBuilder)
+                .baseUrl(baseUrl)
+                .restClientBuilder(customizedRestClient)
+                .webClientBuilder(customizedWebClient)
                 .build();
     }
 
@@ -119,14 +137,13 @@ public class OllamaConfig {
         }
     }
 
-    // Configure the Generation/Chat model
+    // Configure the Generation/Chat model to use the Cloud API
     @Bean
-    public OllamaChatModel ollamaChatModel(OllamaApi ollamaApi) {
-        String chatModelName = OS_NAME.contains(MAC_OS_IDENTIFIER) ? MODEL_NAME_MAC : MODEL_NAME_OTHER;
-        log.info("Detected OS: {}. Using chat model: {}", OS_NAME, chatModelName);
+    public OllamaChatModel ollamaChatModel(@Qualifier("cloudOllamaApi") OllamaApi ollamaApi) {
+        log.info("Using cloud chat model: {}", CHAT_MODEL_NAME);
 
         OllamaChatOptions chatOptions = OllamaChatOptions.builder()
-                .model(chatModelName)
+                .model(CHAT_MODEL_NAME)
                 .numCtx(4096)
                 .disableThinking()
                 .build();
@@ -142,15 +159,15 @@ public class OllamaConfig {
                 .build();
     }
 
-    // Configure the Retrieval/Embedding model
+    // Configure the Retrieval/Embedding model to use the Local API
     @Bean
-    public OllamaEmbeddingModel ollamaEmbeddingModel(OllamaApi ollamaApi) {
+    public OllamaEmbeddingModel ollamaEmbeddingModel(@Qualifier("localOllamaApi") OllamaApi ollamaApi) {
         OllamaEmbeddingOptions embeddingOptions = OllamaEmbeddingOptions.builder()
                 .model(EMBEDDING_MODEL_NAME)
                 .build();
 
         ModelManagementOptions modelManagementOptions = ModelManagementOptions.builder()
-                .pullModelStrategy(PullModelStrategy.NEVER)
+                .pullModelStrategy(PullModelStrategy.WHEN_MISSING)
                 .build();
 
         return OllamaEmbeddingModel.builder()
