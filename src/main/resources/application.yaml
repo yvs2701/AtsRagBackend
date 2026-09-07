@@ -30,9 +30,18 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 768
 
-ollama:
-  api:
-    key: ${OLLAMA_API_KEY}
+    openai:
+      timeout: 5m
+      api-key: "global-dummy-api-key" # to satisfy API key requirement, to declare beans for "audio", "image" and other models
+      chat:
+        base-url: "https://ollama.com/v1"
+        api-key: ${OLLAMA_API_KEY}
+        model: "nemotron-3-nano:30b"
+        max-tokens: 4096
+      embedding:
+        base-url: "http://localhost:11434/v1"
+        api-key: "local-dummy-api-key" # to satisfy API key requirement, local Ollama server ignores this value
+        model: "nomic-embed-text"
 
 apify:
   api:
@@ -63,7 +72,9 @@ logging:
 spring:
   config:
     activate:
-      on-profile: dev
+      on-profile:
+        - dev
+        - test
     import:
       - optional:file:.env[.properties]
   jpa:
@@ -71,9 +82,3 @@ spring:
 logging:
   level:
     com.example.atsragbackend.*: DEBUG
-    # Logs the raw HTTP requests, JSON payloads, and options sent to Ollama API
-    #org.springframework.ai.ollama: TRACE
-    # Logs the high-level ChatClient prompt construction and responses
-    #org.springframework.ai.chat.client: DEBUG
-    # Logs the underlying Spring RestClient HTTP traffic
-    #org.springframework.web.client.RestClient: DEBUG

@@ -26,6 +26,7 @@ public class JobMatchService {
 
     private static final Logger log = LoggerFactory.getLogger(JobMatchService.class);
 
+    private static final int BEST_MATCHES_LIMIT = 8;
     private final MatchTaskRepository repository;
     private final ResumeAnalyzerService analyzerService;
     private final ApifyService apifyService;
@@ -125,7 +126,7 @@ public class JobMatchService {
             log.info("Executing similarity search for taskId: {}", taskId);
             SearchRequest searchRequest = SearchRequest.builder()
                     .query(extractedText)
-                    .topK(5)
+                    .topK(BEST_MATCHES_LIMIT)
                     .filterExpression(String.format("taskId == '%s'", taskId))
                     .build();
 
