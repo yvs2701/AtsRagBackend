@@ -23,12 +23,21 @@ spring:
       max-request-size: 10MB
 
   ai:
+    model:
+      embedding: transformers
+    openai:
+      base-url: https://api.groq.com/openai/v1
+      api-key: ${GROQ_API_KEY}
+      chat:
+        model: openai/gpt-oss-120b
+        temperature: 0.2
+
     vectorstore:
       pgvector:
         initialize-schema: true
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 768
+        dimensions: 384
 
 # Apify configuration mapping for ApifyService.java
 apify:

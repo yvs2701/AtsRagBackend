@@ -128,7 +128,7 @@ public class JobMatchService {
             log.info("Executing similarity search for taskId: {}", taskId);
             SearchRequest searchRequest = SearchRequest.builder()
                     .query(extractedText)
-                    .topK(5)
+                    .topK(10)
                     .filterExpression(String.format("taskId == '%s'", taskId))
                     .build();
 
