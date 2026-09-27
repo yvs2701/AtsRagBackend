@@ -39,7 +39,7 @@ spring:
         model: "nemotron-3-nano:30b"
         max-tokens: 4096
       embedding:
-        base-url: "http://localhost:11434/v1"
+        base-url: "${OLLAMA_EMBEDDING_BASE_URL:http://localhost:11434/v1}"
         api-key: "local-dummy-api-key" # to satisfy API key requirement, local Ollama server ignores this value
         model: "nomic-embed-text"
 
