@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.example'
-version = '1.0.0-SNAPSHOT'
+version = '1.0.1'
 description = 'AtsRagBackend'
 
 java {
@@ -50,4 +50,16 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.named('bootBuildImage') {
+    // Uses the version variable defined at the top of build.gradle
+    imageName = "ats-rag-backend:${project.version}"
+
+    // Also tag as latest so docker-compose.yml doesn't break when versions change
+    tags = ['ats-rag-backend:latest']
+
+    environment = [
+            'BP_JVM_VERSION': '21'
+    ]
 }
