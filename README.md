@@ -5,47 +5,48 @@ Spring Boot backend for parsing PDF resumes, matching LinkedIn jobs via Apify, a
 ## Prerequisites
 
 * Java 21
-* Docker & Docker Compose
-* [Ollama](https://ollama.com/) installed locally
+* Docker (for the database container)
+* Ollama installed locally (for vector embeddings)
+* Ollama Cloud API Key
+* Apify API Token
 
 ---
 
 ## Setup & Run Instructions
 
-1. Ensure Ollama daemon is running, then pull the required embedding and generation models:
-
+1. Ensure the local Ollama daemon is running, then pull the required embedding model:
 ```bash
 ollama pull nomic-embed-text
-ollama pull gemma4:e4b
 ```
 
-2. Create a .env file in the root directory for storing the DB connection details:
-
-```txt
-DB_NAME=ats_db
-DB_USERNAME=postgres
-DB_PASSWORD=Pg@123456
-APIFY_API_TOKEN=apify_api_token
-```
-
-3. Run the DB in docker
-
+2. Create a `.env` file in the backend root directory for storing the database connection details and external API keys:
 ```bash
-docker run -d \
-  --name ats-postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=Pg@123456 \
-  -e POSTGRES_DB=ats_db \
-  -p 5432:5432 \
-  -v ats_db:/var/lib/postgresql/data \
-  pgvector/pgvector:pg16
+   DB_NAME=ats_db
+   DB_USERNAME=postgres
+   DB_PASSWORD=Pg@123456
+   APIFY_API_TOKEN=your_apify_api_token
+   OLLAMA_API_KEY=your_ollama_cloud_api_key
 ```
 
-4. Run the Spring Boot application:
+3. Run the PostgreSQL database with `pgvector` in Docker:
+```bash
+   docker run -d \
+   --name ats-postgres \
+   -e POSTGRES_USER=postgres \
+   -e POSTGRES_PASSWORD=Pg@123456 \
+   -e POSTGRES_DB=ats_db \
+   -p 5432:5432 \
+   -v ats_db:/var/lib/postgresql/data \
+   pgvector/pgvector:pg16
+```
 
+4. Run the Spring Boot application using the `dev` profile (which automatically imports your `.env` file):
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
+
+5. Access the Swagger UI to test the API endpoints locally:
+   Navigate to `http://localhost:8080/swagger-ui/index.html` in your browser.
 
 ---
 
