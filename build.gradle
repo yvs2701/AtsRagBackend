@@ -63,3 +63,14 @@ tasks.named('bootBuildImage') {
             'BP_JVM_VERSION': '21'
     ]
 }
+
+tasks.register('printProjectVersion') {
+    // Capture the version as a String during the configuration phase
+    // We need to store the value outside of the excution block to avoid the warning:
+    // "Invocation of Task.project at execution time has been deprecated."
+    def appVersion = project.version.toString()
+
+    doLast {
+        println appVersion
+    }
+}
